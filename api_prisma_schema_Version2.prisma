@@ -13,11 +13,12 @@ model User {
   name      String?
   role      String   @default("student")
   createdAt DateTime @default(now())
+  documents Document[]
 }
 
 model University {
-  id    String @id @default(uuid())
-  name  String
+  id      String    @id @default(uuid())
+  name    String
   country String
   programs Program[]
 }
@@ -30,4 +31,16 @@ model Program {
   level        String
   intakeMonths String
   createdAt    DateTime @default(now())
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  applicationId String?          // optional relation to an application record (if you add Applications later)
+  key         String   // S3 object key
+  filename    String
+  contentType String
+  size        Int?     // optional size in bytes (you can update after upload)
+  createdAt   DateTime @default(now())
 }
