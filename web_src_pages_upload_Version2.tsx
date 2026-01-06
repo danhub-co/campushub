@@ -16,7 +16,6 @@ export default function UploadPage() {
     try {
       setStatus('Requesting presigned URL...');
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-      // Request presigned URL from API (cookie auth is used)
       const presignRes = await axios.post(
         `${apiBase}/api/documents/presign`,
         { filename: file.name, contentType: file.type || 'application/octet-stream' },
@@ -27,7 +26,6 @@ export default function UploadPage() {
       if (!uploadUrl) throw new Error('No upload URL returned');
 
       setStatus('Uploading to S3...');
-      // Upload file with PUT to the presigned URL
       const putRes = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
@@ -40,8 +38,20 @@ export default function UploadPage() {
         throw new Error(`Upload failed with status ${putRes.status}`);
       }
 
-      setStatus('Upload complete. Document record created.');
-      setDoc(document);
+      setStatus('Upload complete. Confirming on server...');
+      // Call the server endpoint to confirm the upload (HEAD + DB update)
+      const confirmRes = await axios.post(
+        `${apiBase}/api/documents/${document.id}/complete`,
+        {},
+        { withCredentials: true }
+      );
+
+      if (confirmRes.data?.error) {
+        throw new Error(`Confirm failed: ${confirmRes.data.error}`);
+      }
+
+      setStatus('Server verification complete.');
+      setDoc(confirmRes.data.document ?? document);
     } catch (err: any) {
       setStatus(`Error: ${err?.message || 'unknown'}`);
       console.error(err);
