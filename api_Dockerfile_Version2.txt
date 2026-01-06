@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /usr/src/app
+
+# Install dependencies
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
+
+COPY . .
+
+# Generate Prisma client
+RUN yarn prisma:generate
+
+# Build
+RUN yarn build
+
+EXPOSE 4000
+CMD ["node", "dist/main.js"]
