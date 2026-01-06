@@ -16,6 +16,31 @@ export class DocumentsController {
     return res;
   }
 
+  // Protected: confirm upload completion (runs HEAD on S3 and updates DB)
+  @Post(':id/complete')
+  @UseGuards(AuthGuard)
+  async complete(@Req() req: Request, @Param('id') id: string) {
+    const user = (req as any).user;
+    const doc = await (await import('@prisma/client')).PrismaClient.prototype.document?.findUnique?.call
+      ? undefined
+      : undefined;
+    // Ensure document exists and belongs to user (security check)
+    const prisma = (await import('@prisma/client')).PrismaClient;
+    // Using a fresh Prisma instance here to avoid circular import complexities in some setups
+    const p = new prisma();
+    const existing = await p.document.findUnique({ where: { id } });
+    if (!existing) {
+      return { error: 'not_found' };
+    }
+    if (existing.userId !== user.id) {
+      return { error: 'forbidden' };
+    }
+
+    const updated = await this.docs.confirmUpload(id);
+    if (!updated) return { error: 'confirm_failed' };
+    return { document: updated };
+  }
+
   // Protected: get a signed GET url to download
   @Get(':id/url')
   @UseGuards(AuthGuard)
