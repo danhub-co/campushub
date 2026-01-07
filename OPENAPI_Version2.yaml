@@ -1,0 +1,381 @@
+openapi: 3.0.3
+info:
+  title: Study Abroad Assistant API
+  description: |
+    Minimal API surface for the Study Abroad Assistant starter scaffold.
+    Auth uses an HttpOnly cookie named `AUTH_TOKEN` (JWT). The cookie is issued by
+    POST /api/auth/login and must be sent by the browser on subsequent requests.
+  version: "1.0.0"
+servers:
+  - url: http://localhost:4000
+    description: Local development (docker compose)
+paths:
+  /api/health:
+    get:
+      tags:
+        - health
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /api/example:
+    get:
+      tags:
+        - health
+      summary: Example endpoint
+      responses:
+        '200':
+          description: Example response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Study Abroad API — example response
+
+  /api/auth/login:
+    post:
+      tags:
+        - auth
+      summary: Sign in (demo)
+      description: |
+        Demo login endpoint. Accepts email & password, issues JWT set in an HttpOnly cookie `AUTH_TOKEN`.
+        Replace with real credential verification in production.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Logged in — cookie set (Set-Cookie header)
+          headers:
+            Set-Cookie:
+              description: HttpOnly cookie containing JWT (AUTH_TOKEN)
+              schema:
+                type: string
+                example: AUTH_TOKEN=eyJhbGciOiJI...; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  user:
+                    $ref: '#/components/schemas/UserPublic'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - auth
+      summary: Sign out (clear cookie)
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Cookie cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+
+  /api/auth/me:
+    get:
+      tags:
+        - auth
+      summary: Current user
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Returns the authenticated user's public info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/UserPublic'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/documents/presign:
+    post:
+      tags:
+        - documents
+      summary: Create document metadata and return presigned PUT URL
+      description: Protected endpoint. Creates a Document row and returns a presigned PUT URL for direct browser upload to S3.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - filename
+                - contentType
+              properties:
+                filename:
+                  type: string
+                  example: transcript.pdf
+                contentType:
+                  type: string
+                  example: application/pdf
+      responses:
+        '200':
+          description: Presigned upload info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/documents/{id}/complete:
+    post:
+      tags:
+        - documents
+      summary: Confirm upload completion (server-side HEAD & DB update)
+      description: Protected. After the client uploads the file to S3, call this endpoint to confirm the object exists; the server reads object metadata (size/contentType) and marks the Document verified.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document verified and updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document:
+                    $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: Confirmation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/documents/{id}/url:
+    get:
+      tags:
+        - documents
+      summary: Get signed download URL
+      description: Protected. Returns a short-lived signed GET URL for the stored object and the document metadata.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Signed download URL + document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/documents/{id}:
+    delete:
+      tags:
+        - documents
+      summary: Delete document and S3 object
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: AUTH_TOKEN
+      description: |
+        HttpOnly JWT cookie set by POST /api/auth/login. The cookie must be sent by the client.
+  schemas:
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        time:
+          type: string
+          format: date-time
+          example: "2026-01-06T12:00:00Z"
+    UserPublic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          nullable: true
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        applicationId:
+          type: string
+          nullable: true
+        key:
+          type: string
+          description: S3 object key
+        filename:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+          nullable: true
+          description: Size in bytes (populated after server confirmation)
+        verified:
+          type: boolean
+          description: True when server confirmed object exists in S3
+        uploadedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    PresignResponse:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/Document'
+        uploadUrl:
+          type: string
+          format: uri
+          description: Presigned PUT URL for direct browser upload
+        key:
+          type: string
+          description: S3 object key
+        expiresIn:
+          type: integer
+          description: Seconds until presigned URL expires
+    DownloadUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Signed GET url for the object
+        doc:
+          $ref: '#/components/schemas/Document'
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: not_found
+        message:
+          type: string
+          nullable: true
+  responses:
+    Unauthorized:
+      description: Authentication required / invalid cookie
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing_cookie:
+              value:
+                error: unauthorized
+                message: AUTH_TOKEN cookie not found or invalid
+    Forbidden:
+      description: Authenticated but not allowed (ownership check failed)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            not_owner:
+              value:
+                error: forbidden
+                message: document does not belong to authenticated user
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing:
+              value:
+                error: not_found
+                message: resource not found
